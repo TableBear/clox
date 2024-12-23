@@ -11,7 +11,7 @@ typedef struct
     Chunk *chunk;
     uint8_t *ip;
     Value stack[STACK_MAX];
-    // top of stack. 指向栈顶下一个空位
+    // top of stack. point the next free slot
     Value *stackTop;
 } VM;
 

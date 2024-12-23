@@ -3,6 +3,22 @@
 #include "debug.h"
 #include "value.h"
 
+static int constantInstruction(const char *name, Chunk *chunk, int offset)
+{
+    uint8_t constant = chunk->code[offset + 1];
+    // print instruction name and constant content
+    printf("%-16s %4d '", name, constant);
+    printValue(chunk->constants.values[constant]);
+    printf("'\n");
+    return offset + 2;
+}
+
+static int simpleInstruction(const char *name, int offset)
+{
+    printf("%s\n", name);
+    return offset + 1;
+}
+
 void disassembleChunk(Chunk *chunk, const char *name)
 {
     printf("== %s ==\n", name);
@@ -45,20 +61,4 @@ int disassembleInstruction(Chunk *chunk, int offset)
         printf("Unknown instruction %d\n", instruction);
         return offset + 1;
     }
-}
-
-static int constantInstruction(const char *name, Chunk *chunk, int offset)
-{
-    uint8_t constant = chunk->code[offset + 1];
-    // 打印指令名称和常量下标
-    printf("%-16s %4d '", name, constant);
-    printValue(chunk->constants.values[constant]);
-    printf("'\n");
-    return offset + 2;
-}
-
-static int simpleInstruction(const char *name, int offset)
-{
-    printf("%s\n", name);
-    return offset + 1;
 }

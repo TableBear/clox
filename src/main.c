@@ -7,11 +7,11 @@
 
 int main(int argc, const char *args[])
 {
-    // 初始化虚拟机
+    // initial virtual machine
     initVM();
     Chunk chunk;
     initChunk(&chunk);
-    // 添加常量到常量池
+    // add constant value to constant pool in chunk
     int constant = addConstant(&chunk, 1.2);
     writeChunk(&chunk, OP_CONSTANT, 123);
     writeChunk(&chunk, constant, 123);
@@ -30,7 +30,7 @@ int main(int argc, const char *args[])
     writeChunk(&chunk, OP_RETURN, 123);
     // disassembleChunk(&chunk, "test chunk");
     interpret(&chunk);
-    // 释放虚拟机
+    // free virtual machine resouces
     freeVM();
     freeChunk(&chunk);
     return 0;

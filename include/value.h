@@ -6,7 +6,7 @@
 typedef double Value;
 
 /*
- * ValueArray--常量池
+ * ValueArray--Constant value pool
  */
 typedef struct
 {

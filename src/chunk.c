@@ -18,7 +18,7 @@ void freeChunk(Chunk *chunk)
     FREE_ARRAY(uint8_t, chunk->code, chunk->capacity);
     FREE_ARRAY(int, chunk->lines, chunk->capacity);
     freeValueArray(&chunk->constants);
-    // 归零chunk的状态
+    // change chunk state to default value -- zero.
     initChunk(chunk);
 }
 

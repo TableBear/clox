@@ -4,7 +4,7 @@
 #include "common.h"
 #include "value.h"
 /*
- * 字节码类型
+ * bytecode type
  */
 typedef enum
 {
@@ -17,7 +17,7 @@ typedef enum
     OP_RETURN,
 } OPCode;
 /*
- * 一段字节码
+ * a chunk of bytecode
  */
 typedef struct
 {
