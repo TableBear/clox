@@ -7,6 +7,7 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 set(
     CMAKE_SOURCE_DIR 
     src/main.c 
+    src/vm.c
     src/debug.c
     src/memory.c 
     src/value.c 

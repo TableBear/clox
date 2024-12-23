@@ -8,6 +8,7 @@
         "stdint.h": "c",
         "value.h": "c",
         "stdbool.h": "c",
-        "stddef.h": "c"
+        "stddef.h": "c",
+        "vm.h": "c"
     }
 }

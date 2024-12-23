@@ -3,9 +3,12 @@
 #include "common.h"
 #include "chunk.h"
 #include "debug.h"
+#include "vm.h"
 
 int main(int argc, const char *args[])
 {
+    // 初始化虚拟机
+    initVM();
     Chunk chunk;
     initChunk(&chunk);
     // 添加常量到常量池
@@ -13,8 +16,22 @@ int main(int argc, const char *args[])
     writeChunk(&chunk, OP_CONSTANT, 123);
     writeChunk(&chunk, constant, 123);
 
+    constant = addConstant(&chunk, 3.4);
+    writeChunk(&chunk, OP_CONSTANT, 123);
+    writeChunk(&chunk, constant, 123);
+    writeChunk(&chunk, OP_ADD, 123);
+
+    constant = addConstant(&chunk, 5.6);
+    writeChunk(&chunk, OP_CONSTANT, 123);
+    writeChunk(&chunk, constant, 123);
+
+    writeChunk(&chunk, OP_DIVIDE, 123);
+    writeChunk(&chunk, OP_NEGATE, 123);
     writeChunk(&chunk, OP_RETURN, 123);
-    disassembleChunk(&chunk, "test chunk");
+    // disassembleChunk(&chunk, "test chunk");
+    interpret(&chunk);
+    // 释放虚拟机
+    freeVM();
     freeChunk(&chunk);
     return 0;
 }
