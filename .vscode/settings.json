@@ -1,0 +1,13 @@
+{
+    "files.associations": {
+        "common.h": "c",
+        "stdio.h": "c",
+        "memory.h": "c",
+        "chunk.h": "c",
+        "debug.h": "c",
+        "stdint.h": "c",
+        "value.h": "c",
+        "stdbool.h": "c",
+        "stddef.h": "c"
+    }
+}
