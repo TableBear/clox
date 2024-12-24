@@ -15,6 +15,8 @@ set(
     CMAKE_SOURCE_DIR 
     src/main.c 
     src/vm.c
+    src/scanner.c 
+    src/compiler.c
     src/debug.c
     src/memory.c 
     src/value.c 
