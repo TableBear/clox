@@ -34,10 +34,12 @@ void initVM() {
     // vm.stackTop = vm.stack;
     resetStack();
     vm.objects = NULL;
+    initTable(&vm.strings);
 }
 
 void freeVM() {
-     freeObjects();
+    freeTable(&vm.strings);
+    freeObjects();
 }
 
 void push(Value value) {

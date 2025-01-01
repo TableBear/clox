@@ -22,6 +22,7 @@ set(
         src/value.c
         src/chunk.c
         src/object.c
+        src/table.c
 )
 # set utf-8
 if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")

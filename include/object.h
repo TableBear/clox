@@ -2,8 +2,8 @@
 // Created by zhuox on 2025-01-01.
 //
 
-#ifndef CLOX_OBJECT_H
-#define CLOX_OBJECT_H
+#ifndef clox_object_h
+#define clox_object_h
 
 #include "common.h"
 #include "value.h"
@@ -28,6 +28,8 @@ struct ObjString {
     int length;
     // 字符串指针
     char *chars;
+    // 字符串哈希值
+    uint32_t hash;
 };
 
 ObjString *takeString(char *chars, int length);
@@ -40,4 +42,4 @@ static inline bool isObjType(Value value, ObjType type) {
     return IS_OBJ(value) && AS_OBJ(value)->type == type;
 }
 
-#endif //CLOX_OBJECT_H
+#endif //clox_object_h
