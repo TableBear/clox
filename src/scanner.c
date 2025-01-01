@@ -206,6 +206,9 @@ static Token string() {
     return makeToken(TOKEN_STRING);
 }
 
+/*
+ * scan the next token.
+ */
 Token scanToken() {
     skipWhitespace();
     scanner.start = scanner.current;
