@@ -13,6 +13,9 @@ typedef struct {
     Value stack[STACK_MAX];
     // top of stack. point the next free slot
     Value *stackTop;
+    // global variables
+    Table globals;
+    // interned strings
     Table strings;
     Obj *objects;
 } VM;
