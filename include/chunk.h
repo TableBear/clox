@@ -3,11 +3,11 @@
 
 #include "common.h"
 #include "value.h"
+
 /*
  * bytecode type
  */
-typedef enum
-{
+typedef enum {
     OP_CONSTANT,
     OP_NIL,
     OP_TRUE,
@@ -28,17 +28,19 @@ typedef enum
     OP_NEGATE,
     OP_NOT,
     OP_PRINT,
+    OP_JUMP,
+    OP_JUMP_IF_FALSE,
+    OP_LOOP,
     OP_RETURN,
 } OPCode;
 /*
  * a chunk of bytecode
  */
-typedef struct
-{
+typedef struct {
     int count;
     int capacity;
     uint8_t *code;
-    int* lines;
+    int *lines;
     ValueArray constants;
 } Chunk;
 

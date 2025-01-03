@@ -83,6 +83,8 @@ static void concatenate() {
 static InterpretResult run() {
 #define READ_BYTE() (*vm.ip++)
 #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
+#define READ_SHORT() \
+    (vm.ip += 2, (uint16_t) (vm.ip[-2] << 8 | vm.ip[-1]))
 #define READ_STRING() AS_STRING(READ_CONSTANT())
     // 弹出栈顶两个元素
     // 第一个弹出的是二元操作符右边的数，第二个弹出的是二元操作符左边的数
@@ -134,6 +136,7 @@ static InterpretResult run() {
                 break;
             }
             case OP_GET_LOCAL: {
+                // 局部变量位于栈上
                 uint8_t slot = READ_BYTE();
                 push(vm.stack[slot]);
                 break;
@@ -175,10 +178,11 @@ static InterpretResult run() {
                 break;
             case OP_LESS:
                 BINARY_OP(BOOL_VAL, <);
+                break;
                 // 二元运算符：+ - * /
             case OP_ADD:
                 if (IS_STRING(peek(0)) && IS_STRING(peek(1))) {
-                    concatenate(AS_STRING(pop()), AS_STRING(pop()));
+                    concatenate();
                 } else if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1))) {
                     double b = AS_NUMBER(pop());
                     double a = AS_NUMBER(pop());
@@ -207,10 +211,28 @@ static InterpretResult run() {
                 }
                 push(NUMBER_VAL(-AS_NUMBER(pop())));
                 break;
-            case OP_PRINT:
+            case OP_PRINT: {
                 printValue(pop());
                 printf("\n");
                 break;
+            }
+            case OP_JUMP: {
+                uint16_t offset = READ_SHORT();
+                vm.ip += offset;
+                break;
+            }
+            case OP_JUMP_IF_FALSE: {
+                uint16_t offset = READ_SHORT();
+                if (isFalsey(peek(0))) {
+                    vm.ip += offset;
+                }
+                break;
+            }
+            case OP_LOOP: {
+                uint16_t offset = READ_SHORT();
+                vm.ip -= offset;
+                break;
+            }
             case OP_RETURN:
                 // Exit interpreter.
                 return INTERPRET_OK;
@@ -220,6 +242,7 @@ static InterpretResult run() {
     }
 
 #undef READ_BYTE
+#undef READ_SHORT
 #undef READ_CONSTANT
 #undef READ_STRING
 #undef BINARY_OP
