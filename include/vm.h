@@ -1,15 +1,31 @@
 #ifndef clox_vm_h
 #define clox_vm_h
 
-#include "chunk.h"
+#include "object.h"
 #include "table.h"
 #include "value.h"
 
-#define STACK_MAX 256
+// Max call deep
+#define FRAMES_MAX 64
+// Max stack size, every call frame has 255 slots to store local value
+#define STACK_MAX (FRAMES_MAX * UINT8_COUNT)
+
+/**
+ * Call Frame
+ * behead of function call
+ */
+typedef struct {
+    // current function
+    ObjFunction *function;
+    // current instruction pointer
+    uint8_t *ip;
+    // current stack
+    Value *slots;
+} CallFrame;
 
 typedef struct {
-    Chunk *chunk;
-    uint8_t *ip;
+    CallFrame frames[FRAMES_MAX];
+    int frameCount;
     Value stack[STACK_MAX];
     // top of stack. point the next free slot
     Value *stackTop;
