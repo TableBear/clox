@@ -16,7 +16,7 @@
  */
 typedef struct {
     // current function
-    ObjFunction *function;
+    ObjClosure *closure;
     // current instruction pointer
     uint8_t *ip;
     // current stack
@@ -33,6 +33,9 @@ typedef struct {
     Table globals;
     // interned strings
     Table strings;
+    // open upvalues
+    ObjUpvalue* openUpvalues;
+    // all objects
     Obj *objects;
 } VM;
 

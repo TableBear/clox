@@ -44,16 +44,25 @@ typedef struct {
 typedef struct {
     Token name;
     int depth;
+    // is upvalue ?
+    bool isCaptured;
 } Local;
+
+typedef struct {
+    // index of the stack.
+    uint8_t index;
+    // is local value?
+    bool isLocal;
+} Upvalue;
 
 typedef enum {
     TYPE_FUNCTION,
     TYPE_SCRIPT,
 } FunctionType;
 
-typedef struct {
+typedef struct _Complier {
     // record current compiler's parent compiler
-    struct Compiler *enclosing;
+    struct _Complier *enclosing;
     // current compile function
     ObjFunction *function;
     // the type of current compile function
@@ -62,6 +71,8 @@ typedef struct {
     Local locals[UINT8_COUNT];
     // 局部变量数量
     int localCount;
+    // 上值数组
+    Upvalue upvalues[UINT8_COUNT];
     // 当前作用域的嵌套深度
     int scopeDepth;
 } Compiler;
@@ -208,6 +219,7 @@ static void initCompiler(Compiler *compiler, FunctionType type) {
     }
     Local *local = &current->locals[current->localCount++];
     local->depth = 0;
+    local->isCaptured = false;
     local->name.start = "";
     local->name.length = 0;
 }
@@ -236,7 +248,11 @@ static void endScope() {
     // 弹出作用域内所有局部变量
     while (current->localCount > 0 &&
            current->locals[current->localCount - 1].depth > current->scopeDepth) {
-        emitByte(OP_POP);
+        if (current->locals[current->localCount - 1].isCaptured) {
+            emitByte(OP_CLOSE_UPVALUE);
+        } else {
+            emitByte(OP_POP);
+        }
         current->localCount--;
     }
 }
@@ -254,18 +270,18 @@ static ParseRule *getRule(TokenType type);
 
 static void parsePrecedence(Precedence precedence);
 
-static uint8_t identifierConstant(Token *name) {
+static uint8_t identifierConstant(const Token *name) {
     return makeConstant(OBJ_VAL(copyString(name->start, name->length)));
 }
 
-static bool identifiersEqual(Token *a, Token *b) {
+static bool identifiersEqual(const Token *a, const Token *b) {
     if (a->length != b->length) return false;
     return memcmp(a->start, b->start, a->length) == 0;
 }
 
 static int resolveLocal(Compiler *compiler, Token *name) {
     for (int i = current->localCount - 1; i >= 0; i--) {
-        Local *local = &compiler->locals[i];
+        const Local *local = &compiler->locals[i];
         if (identifiersEqual(name, &local->name)) {
             if (local->depth == -1) {
                 error("Can't read local variable in its own initializer.");
@@ -276,7 +292,40 @@ static int resolveLocal(Compiler *compiler, Token *name) {
     return -1;
 }
 
-static void addLocal(Token name) {
+static int addUpvalue(Compiler *compiler, const uint8_t index, const bool isLocal) {
+    const int upvalueCount = compiler->function->upvalueCount;
+    for (int i = 0; i < upvalueCount; i++) {
+        const Upvalue *upvalue = &compiler->upvalues[i];
+        if (upvalue->index == index && upvalue->isLocal == isLocal) {
+            return i;
+        }
+    }
+    if (upvalueCount == UINT8_COUNT) {
+        error("Too many closure variables in function.");
+        return 0;
+    }
+    compiler->upvalues[upvalueCount].isLocal = isLocal;
+    compiler->upvalues[upvalueCount].index = index;
+    return compiler->function->upvalueCount++;
+}
+
+static int resolveUpvalue(Compiler *compiler, Token *name) {
+    if (compiler->enclosing == NULL) return -1;
+
+    const int local = resolveLocal((Compiler *) current->enclosing, name);
+    if (local != -1) {
+        compiler->enclosing->locals[local].isCaptured = true;
+        return addUpvalue(compiler, (uint8_t) local, true);
+    }
+
+    const int upvalue = resolveUpvalue((Compiler *) current->enclosing, name);
+    if (upvalue != -1) {
+        return addUpvalue(compiler, (uint8_t) upvalue, false);
+    }
+    return -1;
+}
+
+static void addLocal(const Token name) {
     if (current->localCount == UINT8_COUNT) {
         error("Too many local variables in function.");
         return;
@@ -286,6 +335,7 @@ static void addLocal(Token name) {
     // -1 表示该局部变量还未被初始化
     // 初始化完后会设置为当前作用域的深度
     local->depth = -1;
+    local->isCaptured = false;
 }
 
 static void declareVariable() {
@@ -341,7 +391,7 @@ static uint8_t argumentList() {
     return argCount;
 }
 
-static void and_(bool canAssign) {
+static void and_(const bool canAssign) {
     // 如果and左边的值为假，直接跳过右边的计算
     int endJump = emitJump(OP_JUMP_IF_FALSE);
     // and 右边开始之前，先弹出左边值
@@ -351,7 +401,7 @@ static void and_(bool canAssign) {
     patchJump(endJump);
 }
 
-static void binary(bool canAssign) {
+static void binary(const bool canAssign) {
     TokenType operatorType = parser.previous.type;
     ParseRule *rule = getRule(operatorType);
     parsePrecedence(rule->precedence + 1);
@@ -391,12 +441,12 @@ static void binary(bool canAssign) {
     }
 }
 
-static void call(bool canAssign) {
-    uint8_t argCount = argumentList();
+static void call(const bool canAssign) {
+    const uint8_t argCount = argumentList();
     emitBytes(OP_CALL, argCount);
 }
 
-static void literal(bool canAssign) {
+static void literal(const bool canAssign) {
     switch (parser.previous.type) {
         case TOKEN_FALSE:
             emitByte(OP_FALSE);
@@ -412,12 +462,12 @@ static void literal(bool canAssign) {
     }
 }
 
-static void grouping(bool canAssign) {
+static void grouping(const bool canAssign) {
     expression();
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
 }
 
-static void unary(bool canAssign) {
+static void unary(const bool canAssign) {
     TokenType operatorType = parser.previous.type;
     parsePrecedence(PREC_UNARY);
     expression();
@@ -433,16 +483,16 @@ static void unary(bool canAssign) {
     }
 }
 
-static void number(bool canAssign) {
+static void number(const bool canAssign) {
     double value = strtod(parser.previous.start, NULL);
     emitConstant(NUMBER_VAL(value));
 }
 
-static void or_(bool canAssign) {
+static void or_(const bool canAssign) {
     // 如果or左边的值为真，直接跳过右边的计算
     // 下面采用无条件 jump 跳到 or 表达式结束的地方
-    int elseJump = emitJump(OP_JUMP_IF_FALSE);
-    int endJump = emitJump(OP_JUMP);
+    const int elseJump = emitJump(OP_JUMP_IF_FALSE);
+    const int endJump = emitJump(OP_JUMP);
 
     patchJump(elseJump);
     emitByte(OP_POP);
@@ -452,16 +502,19 @@ static void or_(bool canAssign) {
     // 这里不弹出任何值，留在栈上最有一个值作为or表达式的最终结果
 }
 
-static void string(bool canAssign) {
+static void string(const bool canAssign) {
     emitConstant(OBJ_VAL(copyString(parser.previous.start + 1, parser.previous.length - 2)));
 }
 
-static void namedVariable(Token name, bool canAssign) {
+static void namedVariable(Token name, const bool canAssign) {
     uint8_t getOp, setOp;
     int arg = resolveLocal(current, &name);
     if (arg != -1) {
         getOp = OP_GET_LOCAL;
         setOp = OP_SET_LOCAL;
+    } else if ((arg = resolveUpvalue(current, &name))) {
+        getOp = OP_GET_UPVALUE;
+        setOp = OP_SET_UPVALUE;
     } else {
         arg = identifierConstant(&name);
         getOp = OP_GET_GLOBAL;
@@ -475,7 +528,7 @@ static void namedVariable(Token name, bool canAssign) {
     }
 }
 
-static void variable(bool canAssign) {
+static void variable(const bool canAssign) {
     namedVariable(parser.previous, canAssign);
 }
 
@@ -580,7 +633,11 @@ static void function(FunctionType type) {
     block();
 
     ObjFunction *function = endCompiler();
-    emitBytes(OP_CONSTANT, makeConstant(OBJ_VAL(function)));
+    emitBytes(OP_CLOSURE, makeConstant(OBJ_VAL(function)));
+    for (int i = 0; i < function->upvalueCount; i++) {
+        emitByte(compiler.upvalues[i].isLocal ? 1 : 0);
+        emitByte(compiler.upvalues[i].index);
+    }
 }
 
 static void funDeclaration() {
