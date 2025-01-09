@@ -23,7 +23,7 @@ void freeTable(Table *table) {
     initTable(table);
 }
 
-static Entry *findEntry(Entry *entries, int capacity, ObjString *key) {
+static Entry *findEntry(Entry *entries, const int capacity, const ObjString *key) {
     uint32_t index = key->hash % capacity;
     Entry *tombstone = NULL;
     for (;;) {
@@ -43,7 +43,7 @@ static Entry *findEntry(Entry *entries, int capacity, ObjString *key) {
     }
 }
 
-static void adjustCapacity(Table *table, int capacity) {
+static void adjustCapacity(Table *table, const int capacity) {
     Entry *entries = ALLOCATE(Entry, capacity);
     for (int i = 0; i < capacity; i++) {
         entries[i].key = NULL;
@@ -66,9 +66,9 @@ static void adjustCapacity(Table *table, int capacity) {
     table->capacity = capacity;
 }
 
-bool tableGet(Table *table, ObjString *key, Value *value) {
+bool tableGet(const Table *table, const ObjString *key, Value *value) {
     if (table->count == 0) return false;
-    Entry *entry = findEntry(table->entries, table->capacity, key);
+    const Entry *entry = findEntry(table->entries, table->capacity, key);
     if (entry->key == NULL) return false;
     *value = entry->value;
     return true;
@@ -76,7 +76,7 @@ bool tableGet(Table *table, ObjString *key, Value *value) {
 
 bool tableSet(Table *table, ObjString *key, Value value) {
     if (table->count + 1 > table->capacity * TABLE_MAX_LOAD) {
-        int capacity = GROW_CAPACITY(table->capacity);
+        const int capacity = GROW_CAPACITY(table->capacity);
         adjustCapacity(table, capacity);
     }
     Entry *entry = findEntry(table->entries, table->capacity, key);
@@ -89,7 +89,7 @@ bool tableSet(Table *table, ObjString *key, Value value) {
     return isNewKey;
 }
 
-bool tableDelete(Table *table, ObjString *key) {
+bool tableDelete(const Table *table, const ObjString *key) {
     if (table->count == 0) return false;
     Entry *entry = findEntry(table->entries, table->capacity, key);
     if (entry->key == NULL) return false;
@@ -99,16 +99,16 @@ bool tableDelete(Table *table, ObjString *key) {
     return true;
 }
 
-void tableAddAll(Table *from, Table *to) {
+void tableAddAll(const Table *from, Table *to) {
     for (int i = 0; i < from->capacity; ++i) {
-        Entry *entry = &from->entries[i];
+        const Entry *entry = &from->entries[i];
         if (entry->key != NULL) {
             tableSet(to, entry->key, entry->value);
         }
     }
 }
 
-ObjString *tableFindString(Table *table, const char *chars, int length, uint32_t hash) {
+ObjString *tableFindString(const Table *table, const char *chars, int length, uint32_t hash) {
     if (table->count == 0) return NULL;
     uint32_t index = hash % table->capacity;
     for (;;) {
@@ -122,9 +122,26 @@ ObjString *tableFindString(Table *table, const char *chars, int length, uint32_t
         } else if (entry->key->length == length &&
                    entry->key->hash == hash &&
                    memcmp(entry->key->chars, chars, length) == 0
-                ) {
+        ) {
             return entry->key;
         }
         index = (index + 1) % table->capacity;
+    }
+}
+
+void tableRemoveWhite(const Table* table) {
+    for (int i = 0; i < table->capacity; ++i) {
+        const Entry *entry = &table->entries[i];
+        if (entry->key != NULL && !entry->key->obj.isMarked) {
+            tableDelete(table, entry->key);
+        }
+    }
+}
+
+void markTable(const Table *table) {
+    for (int i = 0; i < table->capacity; ++i) {
+        const Entry *entry = &table->entries[i];
+        markObject((Obj *) entry->key);
+        markValue(entry->value);
     }
 }

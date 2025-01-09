@@ -57,7 +57,16 @@ void initVM() {
     // vm.stackTop = vm.stack;
     resetStack();
     vm.objects = NULL;
+    // init self adjust gc
+    vm.bytesAllocated = 0;
+    vm.nextGC = 1024 * 1024;
+    // init gray stack
+    vm.grayCount = 0;
+    vm.grayCapacity = 0;
+    vm.grayStack = NULL;
+    // init globals
     initTable(&vm.globals);
+    // init strings
     initTable(&vm.strings);
     defineNative("clock", clockNative);
 }
@@ -158,15 +167,17 @@ static bool isFalsey(Value value) {
 }
 
 static void concatenate() {
-    ObjString *b = AS_STRING(pop());
-    ObjString *a = AS_STRING(pop());
+    const ObjString *b = AS_STRING(peek(0));
+    const ObjString *a = AS_STRING(peek(1));
 
-    int length = b->length + a->length;
+    const int length = b->length + a->length;
     char *chars = ALLOCATE(char, length + 1);
     memcpy(chars, a->chars, a->length);
     memcpy(chars + a->length, b->chars, b->length);
     chars[length] = '\0';
     ObjString *result = takeString(chars, length);
+    pop();
+    pop();
     push(OBJ_VAL(result));
 }
 
@@ -289,8 +300,8 @@ static InterpretResult run() {
                 if (IS_STRING(peek(0)) && IS_STRING(peek(1))) {
                     concatenate();
                 } else if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1))) {
-                    double b = AS_NUMBER(pop());
-                    double a = AS_NUMBER(pop());
+                    const double b = AS_NUMBER(pop());
+                    const double a = AS_NUMBER(pop());
                     push(NUMBER_VAL(a + b));
                 } else {
                     runtimeError("Operands must be two numbers or two strings.");
