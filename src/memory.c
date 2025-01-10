@@ -60,6 +60,11 @@ static void blackenObject(Obj *object) {
         case OBJ_NATIVE:
         case OBJ_STRING:
             break;
+        case OBJ_CLASS: {
+            const ObjClass *class = (ObjClass *) object;
+            markObject((Obj *) class->name);
+            break;
+        }
         case OBJ_CLOSURE: {
             const ObjClosure *closure = (ObjClosure *) object;
             markObject((Obj *) closure->function);
@@ -175,6 +180,9 @@ static void freeObject(Obj *object) {
 #endif
 
     switch (object->type) {
+        case OBJ_CLASS: {
+            FREE(ObjClass, object);
+        }
         case OBJ_CLOSURE: {
             const ObjClosure *closure = (ObjClosure *) object;
             FREE_ARRAY(ObjUpvalue *, closure->upvalues, closure->upvalueCount);
@@ -185,6 +193,12 @@ static void freeObject(Obj *object) {
             ObjFunction *function = (ObjFunction *) object;
             freeChunk(&function->chunk);
             FREE(ObjFunction, object);
+            break;
+        }
+        case OBJ_INSTANCE: {
+            ObjInstance *instance = (ObjInstance *) object;
+            freeTable(&instance->fields);
+            FREE(ObjInstance, object);
             break;
         }
         case OBJ_NATIVE: {

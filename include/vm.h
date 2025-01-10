@@ -60,7 +60,7 @@ void freeVM();
 
 InterpretResult interpret(const char *source);
 
-void push(Value value);
+void push(const Value value);
 
 Value pop();
 

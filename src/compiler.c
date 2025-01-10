@@ -182,8 +182,8 @@ static void emitReturn() {
     emitByte(OP_RETURN);
 }
 
-static uint8_t makeConstant(Value value) {
-    int constant = addConstant(currentChunk(), value);
+static uint8_t makeConstant(const Value value) {
+    const int constant = addConstant(currentChunk(), value);
     if (constant > UINT8_MAX) {
         error("Too many constants in one chunk.");
         return 0;
@@ -191,11 +191,11 @@ static uint8_t makeConstant(Value value) {
     return (uint8_t) constant;
 }
 
-static void emitConstant(Value value) {
+static void emitConstant(const Value value) {
     emitBytes(OP_CONSTANT, makeConstant(value));
 }
 
-static void patchJump(int offset) {
+static void patchJump(const int offset) {
     // 减2是为了指向挑战字节码的起始位置
     int jump = currentChunk()->count - offset - 2;
     if (jump > UINT16_MAX) {
@@ -206,7 +206,7 @@ static void patchJump(int offset) {
     currentChunk()->code[offset + 1] = jump & 0xff;
 }
 
-static void initCompiler(Compiler *compiler, FunctionType type) {
+static void initCompiler(Compiler *compiler,const FunctionType type) {
     compiler->enclosing = (struct Compiler *) current;
     compiler->function = NULL;
     compiler->type = type;
@@ -447,6 +447,17 @@ static void call(const bool canAssign) {
     emitBytes(OP_CALL, argCount);
 }
 
+static void dot(const bool canAssign) {
+    consume(TOKEN_IDENTIFIER, "Expect property name after '.'.");
+    const uint8_t name = identifierConstant(&parser.previous);
+    if (canAssign && match(TOKEN_EQUAL)) {
+        expression();
+        emitBytes(OP_SET_PROPERTY, name);
+    } else {;
+        emitBytes(OP_GET_PROPERTY, name);
+    }
+}
+
 static void literal(const bool canAssign) {
     switch (parser.previous.type) {
         case TOKEN_FALSE:
@@ -513,7 +524,7 @@ static void namedVariable(Token name, const bool canAssign) {
     if (arg != -1) {
         getOp = OP_GET_LOCAL;
         setOp = OP_SET_LOCAL;
-    } else if ((arg = resolveUpvalue(current, &name))) {
+    } else if ((arg = resolveUpvalue(current, &name))  != -1) {
         getOp = OP_GET_UPVALUE;
         setOp = OP_SET_UPVALUE;
     } else {
@@ -539,7 +550,7 @@ ParseRule rules[] = {
     [TOKEN_LEFT_BRACE] = {NULL, NULL, PREC_NONE},
     [TOKEN_RIGHT_BRACE] = {NULL, NULL, PREC_NONE},
     [TOKEN_COMMA] = {NULL, NULL, PREC_NONE},
-    [TOKEN_DOT] = {NULL, NULL, PREC_NONE},
+    [TOKEN_DOT] = {NULL, dot, PREC_CALL},
     [TOKEN_MINUS] = {unary, binary, PREC_TERM},
     [TOKEN_PLUS] = {NULL, binary, PREC_TERM},
     [TOKEN_SEMICOLON] = {NULL, NULL, PREC_NONE},
@@ -578,17 +589,17 @@ ParseRule rules[] = {
 
 static void parsePrecedence(Precedence precedence) {
     advance();
-    ParseFn prefixRule = getRule(parser.previous.type)->prefix;
+    const ParseFn prefixRule = getRule(parser.previous.type)->prefix;
     if (prefixRule == NULL) {
         error("Expect expression.");
         return;
     }
-    bool canAssign = (precedence <= PREC_ASSIGNMENT);
+    const bool canAssign = (precedence <= PREC_ASSIGNMENT);
     prefixRule(canAssign);
     // 如果当前Token的优先级比期望的高，则继续解析下一个token
     while (precedence <= getRule(parser.current.type)->precedence) {
         advance();
-        ParseFn infixRule = getRule(parser.previous.type)->infix;
+        const ParseFn infixRule = getRule(parser.previous.type)->infix;
         infixRule(canAssign);
     }
     if (canAssign && match(TOKEN_EQUAL)) {
@@ -610,6 +621,19 @@ static void block() {
     }
 
     consume(TOKEN_RIGHT_BRACE, "Expect '}' after block.");
+}
+
+static void classDeclaration() {
+    consume(TOKEN_IDENTIFIER, "Expect class name.");
+    const uint8_t nameConstant = identifierConstant(&parser.previous);
+    declareVariable();
+
+    emitBytes(OP_CLASS, nameConstant);
+    // mark class name available
+    defineVariable(nameConstant);
+
+    consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.");
+    consume(TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
 }
 
 static void function(FunctionType type) {
@@ -798,7 +822,9 @@ static void synchronize() {
 }
 
 static void declaration() {
-    if (match(TOKEN_FUN)) {
+    if (match(TOKEN_CLASS)) {
+        classDeclaration();
+    } else if (match(TOKEN_FUN)) {
         funDeclaration();
     } else if (match(TOKEN_VAR)) {
         varDeclaration();
