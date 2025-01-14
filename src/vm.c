@@ -68,12 +68,16 @@ void initVM() {
     initTable(&vm.globals);
     // init strings
     initTable(&vm.strings);
+    // prevent GC error
+    vm.initString = NULL;
+    vm.initString = copyString("init", 4);
     defineNative("clock", clockNative);
 }
 
 void freeVM() {
     freeTable(&vm.globals);
     freeTable(&vm.strings);
+    vm.initString = NULL;
     freeObjects();
 }
 
@@ -116,9 +120,23 @@ static bool call(ObjClosure *closure, const int argCount) {
 static bool callValue(const Value callee, const int argCount) {
     if (IS_OBJ(callee)) {
         switch (OBJ_TYPE(callee)) {
+            case OBJ_BOUND_METHOD: {
+                const ObjBoundMethod *boundMethod = AS_BOUND_METHOD(callee);
+                // the first value of closure slot window is the receiver.
+                // so skips all arg
+                vm.stackTop[-argCount - 1] = boundMethod->receiver;
+                return call(boundMethod->method, argCount);
+            }
             case OBJ_CLASS: {
                 ObjClass *klass = AS_CLASS(callee);
                 vm.stackTop[-argCount - 1] = OBJ_VAL(newInstance(klass));
+                Value initializer;
+                if (tableGet(&klass->methods, vm.initString, &initializer)) {
+                    return call(AS_CLOSURE(initializer), argCount);
+                } else if (argCount != 0) {
+                    runtimeError("Expected 0 arguments but got %d", argCount);
+                    return false;
+                }
                 return true;
             }
             case OBJ_CLOSURE: {
@@ -136,6 +154,43 @@ static bool callValue(const Value callee, const int argCount) {
     }
     runtimeError("Can only call functions and classes.");
     return false;
+}
+
+static bool invokeFromClass(const ObjClass *klass, const ObjString *name, const int argCount) {
+    Value method;
+    if (!tableGet(&klass->methods, name, &method)) {
+        runtimeError("Undefined property '%s'.", name->chars);
+        return false;
+    }
+    return call(AS_CLOSURE(method), argCount);
+}
+
+static bool invoke(const ObjString *name, const int argCount) {
+    const Value receiver = peek(argCount);
+    if (!IS_INSTANCE(receiver)) {
+        runtimeError("Only instances have methods.");
+        return false;
+    }
+    const ObjInstance *instance = AS_INSTANCE(receiver);
+    Value value;
+    if (tableGet(&instance->fields, name, &value)) {
+        // replace the receiver
+        vm.stackTop[-argCount - 1] = value;
+        return callValue(value, argCount);
+    }
+    return invokeFromClass(instance->klass, name, argCount);
+}
+
+static bool bindMethod(const ObjClass *klass, const ObjString *name) {
+    Value method;
+    if (!tableGet(&klass->methods, name, &method)) {
+        runtimeError("Undefined property '%s'.", name->chars);
+        return false;
+    }
+    ObjBoundMethod *bound = newBoundMethod(peek(0), AS_CLOSURE(method));
+    pop();
+    push(OBJ_VAL(bound));
+    return true;
 }
 
 static ObjUpvalue *captureUpvalue(Value *local) {
@@ -165,6 +220,15 @@ static void closeUpvalues(Value *last) {
         upvalue->location = &upvalue->closed;
         vm.openUpvalues = upvalue->next;
     }
+}
+
+static void defineMethod(const ObjString *name) {
+    // first value is the method closure.
+    const Value method = peek(0);
+    // second value is the class obj.
+    ObjClass *klass = AS_CLASS(peek(1));
+    tableSet(&klass->methods, name, method);
+    pop();
 }
 
 static bool isFalsey(Value value) {
@@ -301,6 +365,9 @@ static InterpretResult run() {
                     push(value);
                     break;
                 }
+                if (!bindMethod(instance->klass, name)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
                 runtimeError("Undefined property '%s'.", name->chars);
                 return INTERPRET_RUNTIME_ERROR;
             }
@@ -388,6 +455,17 @@ static InterpretResult run() {
                 if (!callValue(peek(argCount), argCount)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
+                // if the call succeeds, the frame has been update to the top of frame stack
+                frame = &vm.frames[vm.frameCount - 1];
+                break;
+            }
+            case OP_INVOKE: {
+                const ObjString *method = READ_STRING();
+                const int argCount = READ_BYTE();
+                if (!invoke(method, argCount)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                // if the call succeeds, the frame has been update to the top of frame stack
                 frame = &vm.frames[vm.frameCount - 1];
                 break;
             }
@@ -429,6 +507,9 @@ static InterpretResult run() {
             case OP_CLASS:
                 push(OBJ_VAL(newClass(READ_STRING())));
                 break;
+            case OP_METHOD:
+                defineMethod(READ_STRING());
+                break;
             default:
                 break;
         }
@@ -452,5 +533,6 @@ InterpretResult interpret(const char *source) {
     pop();
     push(OBJ_VAL(closure));
     call(closure, 0);
+    printf("--------------------------------------------------------------------------------\n");
     return run();
 }

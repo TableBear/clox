@@ -33,6 +33,8 @@ typedef struct {
     Table globals;
     // interned strings
     Table strings;
+    // string behalf `init`
+    ObjString *initString;
     // open upvalues
     ObjUpvalue *openUpvalues;
     // all objects

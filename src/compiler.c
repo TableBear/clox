@@ -57,13 +57,15 @@ typedef struct {
 } Upvalue;
 
 typedef enum {
+    TYPE_INITIALIZER,
     TYPE_FUNCTION,
+    TYPE_METHOD,
     TYPE_SCRIPT,
 } FunctionType;
 
-typedef struct _Complier {
+typedef struct Compiler {
     // record current compiler's parent compiler
-    struct _Complier *enclosing;
+    struct Compiler *enclosing;
     // current compile function
     ObjFunction *function;
     // the type of current compile function
@@ -78,9 +80,15 @@ typedef struct _Complier {
     int scopeDepth;
 } Compiler;
 
+typedef struct ClassCompiler {
+    struct ClassCompiler *enclosing;
+} ClassCompiler;
+
 Parser parser;
 
 Compiler *current = NULL;
+
+ClassCompiler *currentClass = NULL;
 
 Chunk *compilingChunk;
 
@@ -88,7 +96,7 @@ static Chunk *currentChunk() {
     return &current->function->chunk;
 }
 
-static void errorAt(Token *token, const char *message) {
+static void errorAt(const Token *token, const char *message) {
     if (parser.panicMode) {
         return;
     }
@@ -129,7 +137,7 @@ static void advance() {
 /*
  * consume an expected type token, if not, throw an error
  */
-static void consume(TokenType type, const char *message) {
+static void consume(const TokenType type, const char *message) {
     if (parser.current.type == type) {
         advance();
         return;
@@ -148,11 +156,11 @@ static bool match(TokenType type) {
 }
 
 
-static void emitByte(uint8_t byte) {
+static void emitByte(const OPCode byte) {
     writeChunk(currentChunk(), byte, parser.previous.line);
 }
 
-static void emitBytes(uint8_t byte1, uint8_t byte2) {
+static void emitBytes(const OPCode byte1, const uint8_t byte2) {
     emitByte(byte1);
     emitByte(byte2);
 }
@@ -177,8 +185,13 @@ static int emitJump(uint8_t instruction) {
 }
 
 static void emitReturn() {
-    // default return nil.
-    emitByte(OP_NIL);
+    if (current->type == TYPE_INITIALIZER) {
+        // initializer return this pointer.
+        emitBytes(OP_GET_LOCAL, 0);
+    } else {
+        // default return nil.
+        emitByte(OP_NIL);
+    }
     emitByte(OP_RETURN);
 }
 
@@ -206,7 +219,7 @@ static void patchJump(const int offset) {
     currentChunk()->code[offset + 1] = jump & 0xff;
 }
 
-static void initCompiler(Compiler *compiler,const FunctionType type) {
+static void initCompiler(Compiler *compiler, const FunctionType type) {
     compiler->enclosing = (struct Compiler *) current;
     compiler->function = NULL;
     compiler->type = type;
@@ -221,8 +234,15 @@ static void initCompiler(Compiler *compiler,const FunctionType type) {
     Local *local = &current->locals[current->localCount++];
     local->depth = 0;
     local->isCaptured = false;
-    local->name.start = "";
-    local->name.length = 0;
+    // if compile type isn't a function. slot 0 is a instance as receiver.
+    // else slot 0 is a closure.
+    if (type != TYPE_FUNCTION) {
+        local->name.start = "this";
+        local->name.length = 4;
+    } else {
+        local->name.start = "";
+        local->name.length = 0;
+    }
 }
 
 static ObjFunction *endCompiler() {
@@ -341,10 +361,10 @@ static void addLocal(const Token name) {
 
 static void declareVariable() {
     if (current->scopeDepth == 0) return;
-    Token *name = &parser.previous;
+    const Token *name = &parser.previous;
     // 从嵌套最深的 local 变量开始，逐个比较，如果深度小于当前作用域，说明该变量已经声明过了
     for (int i = current->localCount - 1; i >= 0; i--) {
-        Local *local = &current->locals[i];
+        const Local *local = &current->locals[i];
         if (local->depth != -1 && local->depth < current->scopeDepth) {
             break;
         }
@@ -394,7 +414,7 @@ static uint8_t argumentList() {
 
 static void and_(const bool canAssign) {
     // 如果and左边的值为假，直接跳过右边的计算
-    int endJump = emitJump(OP_JUMP_IF_FALSE);
+    const int endJump = emitJump(OP_JUMP_IF_FALSE);
     // and 右边开始之前，先弹出左边值
     emitByte(OP_POP);
     parsePrecedence(PREC_AND);
@@ -403,8 +423,8 @@ static void and_(const bool canAssign) {
 }
 
 static void binary(const bool canAssign) {
-    TokenType operatorType = parser.previous.type;
-    ParseRule *rule = getRule(operatorType);
+    const TokenType operatorType = parser.previous.type;
+    const ParseRule *rule = getRule(operatorType);
     parsePrecedence(rule->precedence + 1);
     switch (operatorType) {
         case TOKEN_BANG_EQUAL:
@@ -453,7 +473,11 @@ static void dot(const bool canAssign) {
     if (canAssign && match(TOKEN_EQUAL)) {
         expression();
         emitBytes(OP_SET_PROPERTY, name);
-    } else {;
+    } else if (match(TOKEN_LEFT_PAREN)) {
+        const uint8_t argCount = argumentList();
+        emitBytes(OP_INVOKE, name);
+        emitByte(argCount);
+    } else {
         emitBytes(OP_GET_PROPERTY, name);
     }
 }
@@ -480,7 +504,7 @@ static void grouping(const bool canAssign) {
 }
 
 static void unary(const bool canAssign) {
-    TokenType operatorType = parser.previous.type;
+    const TokenType operatorType = parser.previous.type;
     parsePrecedence(PREC_UNARY);
     expression();
 
@@ -496,7 +520,7 @@ static void unary(const bool canAssign) {
 }
 
 static void number(const bool canAssign) {
-    double value = strtod(parser.previous.start, NULL);
+    const double value = strtod(parser.previous.start, NULL);
     emitConstant(NUMBER_VAL(value));
 }
 
@@ -524,7 +548,7 @@ static void namedVariable(Token name, const bool canAssign) {
     if (arg != -1) {
         getOp = OP_GET_LOCAL;
         setOp = OP_SET_LOCAL;
-    } else if ((arg = resolveUpvalue(current, &name))  != -1) {
+    } else if ((arg = resolveUpvalue(current, &name)) != -1) {
         getOp = OP_GET_UPVALUE;
         setOp = OP_SET_UPVALUE;
     } else {
@@ -542,6 +566,14 @@ static void namedVariable(Token name, const bool canAssign) {
 
 static void variable(const bool canAssign) {
     namedVariable(parser.previous, canAssign);
+}
+
+static void this_(bool canAssign) {
+    if (currentClass == NULL) {
+        error("Can't use 'this' outside of a class.");
+        return;
+    }
+    variable(false);
 }
 
 ParseRule rules[] = {
@@ -579,7 +611,7 @@ ParseRule rules[] = {
     [TOKEN_PRINT] = {NULL, NULL, PREC_NONE},
     [TOKEN_RETURN] = {NULL, NULL, PREC_NONE},
     [TOKEN_SUPER] = {NULL, NULL, PREC_NONE},
-    [TOKEN_THIS] = {NULL, NULL, PREC_NONE},
+    [TOKEN_THIS] = {NULL, this_, PREC_NONE},
     [TOKEN_TRUE] = {NULL, NULL, PREC_NONE},
     [TOKEN_VAR] = {NULL, NULL, PREC_NONE},
     [TOKEN_WHILE] = {NULL, NULL, PREC_NONE},
@@ -623,19 +655,6 @@ static void block() {
     consume(TOKEN_RIGHT_BRACE, "Expect '}' after block.");
 }
 
-static void classDeclaration() {
-    consume(TOKEN_IDENTIFIER, "Expect class name.");
-    const uint8_t nameConstant = identifierConstant(&parser.previous);
-    declareVariable();
-
-    emitBytes(OP_CLASS, nameConstant);
-    // mark class name available
-    defineVariable(nameConstant);
-
-    consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.");
-    consume(TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
-}
-
 static void function(FunctionType type) {
     Compiler compiler;
     initCompiler(&compiler, type);
@@ -648,7 +667,7 @@ static void function(FunctionType type) {
             if (current->function->arity > 255) {
                 errorAtCurrent("Can't have more than 255 parameters.");
             }
-            uint8_t constant = parseVariable("Expect parameter name.");
+            const uint8_t constant = parseVariable("Expect parameter name.");
             defineVariable(constant);
         } while (match(TOKEN_COMMA));
     }
@@ -665,15 +684,56 @@ static void function(FunctionType type) {
     }
 }
 
+static void method() {
+    consume(TOKEN_IDENTIFIER, "Expect method name.");
+    const uint8_t constant = identifierConstant(&parser.previous);
+    FunctionType type = TYPE_METHOD;
+    if (parser.previous.length == 4 && memcmp(parser.previous.start, "init", 4) == 0) {
+        type = TYPE_INITIALIZER;
+    }
+
+    // parse function. function will be stack top.
+    function(type);
+    emitBytes(OP_METHOD, constant);
+}
+
+static void classDeclaration() {
+    consume(TOKEN_IDENTIFIER, "Expect class name.");
+    const Token className = parser.previous;
+    const uint8_t nameConstant = identifierConstant(&parser.previous);
+    declareVariable();
+
+    emitBytes(OP_CLASS, nameConstant);
+    // mark class name available
+    defineVariable(nameConstant);
+
+    ClassCompiler classCompiler;
+    classCompiler.enclosing = currentClass;
+    currentClass = &classCompiler;
+
+    // push class name to stack top
+    namedVariable(className, false);
+
+    consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.");
+    while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF)) {
+        method();
+    }
+    consume(TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
+    // pop class name from stack
+    emitByte(OP_POP);
+    currentClass = currentClass->enclosing;
+}
+
+
 static void funDeclaration() {
-    uint8_t global = parseVariable("Expect function name.");
+    const uint8_t global = parseVariable("Expect function name.");
     markInitialized();
     function(TYPE_FUNCTION);
     defineVariable(global);
 }
 
 static void varDeclaration() {
-    uint8_t global = parseVariable("Expect variable name.");
+    const uint8_t global = parseVariable("Expect variable name.");
     if (match(TOKEN_EQUAL)) {
         expression();
     } else {
@@ -777,6 +837,9 @@ static void returnStatement() {
     if (match(TOKEN_SEMICOLON)) {
         emitReturn();
     } else {
+        if (current->type == TYPE_INITIALIZER) {
+            error("Can't return from an initializer.");
+        }
         expression();
         consume(TOKEN_SEMICOLON, "Expect ';' after return value.");
         emitByte(OP_RETURN);

@@ -61,7 +61,8 @@ static void runFile(const char *path) {
     }
 }
 
-int main(int argc, const char *args[]) {
+int main(const int argc, const char *args[]) {
+    setbuf(stdout,NULL);
     // initial virtual machine
     initVM();
     if (argc == 1) {

@@ -60,9 +60,16 @@ static void blackenObject(Obj *object) {
         case OBJ_NATIVE:
         case OBJ_STRING:
             break;
+        case OBJ_BOUND_METHOD: {
+            const ObjBoundMethod *method = (ObjBoundMethod *) object;
+            markValue(method->receiver);
+            markObject((Obj *) method->method);
+            break;
+        }
         case OBJ_CLASS: {
             const ObjClass *class = (ObjClass *) object;
             markObject((Obj *) class->name);
+            markTable(&class->methods);
             break;
         }
         case OBJ_CLOSURE: {
@@ -126,6 +133,7 @@ static void markRoots() {
     markTable(&vm.globals);
     // mark the compiler state
     markCompilerRoots();
+    markObject((Obj *) vm.initString);
 }
 
 static void traceReferences() {
@@ -180,7 +188,13 @@ static void freeObject(Obj *object) {
 #endif
 
     switch (object->type) {
+        case OBJ_BOUND_METHOD: {
+            FREE(ObjBoundMethod, object);
+            break;
+        }
         case OBJ_CLASS: {
+            const ObjClass *class = (ObjClass *) object;
+            freeTable(&class->methods);
             FREE(ObjClass, object);
         }
         case OBJ_CLOSURE: {
