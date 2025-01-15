@@ -24,7 +24,7 @@ void freeTable(Table *table) {
 }
 
 static Entry *findEntry(Entry *entries, const int capacity, const ObjString *key) {
-    uint32_t index = key->hash % capacity;
+    uint32_t index = key->hash & (capacity - 1);
     Entry *tombstone = NULL;
     for (;;) {
         Entry *entry = &entries[index];
@@ -39,7 +39,7 @@ static Entry *findEntry(Entry *entries, const int capacity, const ObjString *key
         } else if (entry->key == key) {
             return entry;
         }
-        index = (index + 1) % capacity;
+        index = key->hash & (capacity - 1);
     }
 }
 
@@ -53,7 +53,7 @@ static void adjustCapacity(Table *table, const int capacity) {
     // if entry is deleted, it won't be count
     table->count = 0;
     for (int i = 0; i < table->capacity; ++i) {
-        Entry *entry = &table->entries[i];
+        const Entry *entry = &table->entries[i];
         if (entry->key == NULL) continue;
         Entry *dest = findEntry(entries, capacity, entry->key);
         dest->key = entry->key;
@@ -80,7 +80,7 @@ bool tableSet(Table *table, ObjString *key, Value value) {
         adjustCapacity(table, capacity);
     }
     Entry *entry = findEntry(table->entries, table->capacity, key);
-    bool isNewKey = entry->key == NULL;
+    const bool isNewKey = entry->key == NULL;
     // 新插入的键（也即不是替换）且插入位置不是墓碑位置，则计数加一
     if (isNewKey && IS_NIL(entry->value)) table->count++;
 
@@ -110,9 +110,9 @@ void tableAddAll(const Table *from, Table *to) {
 
 ObjString *tableFindString(const Table *table, const char *chars, int length, uint32_t hash) {
     if (table->count == 0) return NULL;
-    uint32_t index = hash % table->capacity;
+    uint32_t index = hash & (table->capacity - 1);
     for (;;) {
-        Entry *entry = &table->entries[index];
+        const Entry *entry = &table->entries[index];
         if (entry->key == NULL) {
             // 遇到空槽，意味着没有找到
             if (IS_NIL(entry->value)) {
@@ -125,11 +125,11 @@ ObjString *tableFindString(const Table *table, const char *chars, int length, ui
         ) {
             return entry->key;
         }
-        index = (index + 1) % table->capacity;
+        index = (index + 1) & (table->capacity - 1);
     }
 }
 
-void tableRemoveWhite(const Table* table) {
+void tableRemoveWhite(const Table *table) {
     for (int i = 0; i < table->capacity; ++i) {
         const Entry *entry = &table->entries[i];
         if (entry->key != NULL && !entry->key->obj.isMarked) {

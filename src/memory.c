@@ -37,7 +37,7 @@ void *reallocate(void *pointer, const size_t oldSize, const size_t newSize) {
     return result;
 }
 
-void markValue(Value value) {
+void markValue(const Value value) {
     if (IS_OBJ(value)) {
         markObject(AS_OBJ(value));
     }
@@ -78,11 +78,18 @@ static void blackenObject(Obj *object) {
             for (int i = 0; i < closure->upvalueCount; i++) {
                 markObject((Obj *) closure->upvalues[i]);
             }
+            break;
         }
         case OBJ_FUNCTION: {
             const ObjFunction *function = (ObjFunction *) object;
             markObject((Obj *) function->name);
             markArray(&function->chunk.constants);
+            break;
+        }
+        case OBJ_INSTANCE: {
+            const ObjInstance *instance = (ObjInstance *) object;
+            markObject((Obj *) instance->klass);
+            markTable(&instance->fields);
             break;
         }
         case OBJ_UPVALUE:
@@ -167,7 +174,7 @@ static void sweep() {
 void collectGarbage() {
 #ifdef DEBUG_LOG_GC
     printf("-- gc begin\n");
-    size_t before = vm.bytesAllocated;
+    const size_t before = vm.bytesAllocated;
 #endif
     markRoots();
     traceReferences();
@@ -181,12 +188,33 @@ void collectGarbage() {
 #endif
 }
 
+static const char *translateType(const ObjType type) {
+    switch (type) {
+        case OBJ_BOUND_METHOD:
+            return "bound method";
+        case OBJ_CLASS:
+            return "class";
+        case OBJ_CLOSURE:
+            return "closure";
+        case OBJ_FUNCTION:
+            return "function";
+        case OBJ_INSTANCE:
+            return "instance";
+        case OBJ_NATIVE:
+            return "native function";
+        case OBJ_STRING:
+            return "string";
+        case OBJ_UPVALUE:
+            return "upvalue";
+        default:
+            return "unknown type";
+    }
+}
 
 static void freeObject(Obj *object) {
 #ifdef DEBUG_LOG_GC
-    printf("%p free type %d\n", (void *) object, object->type);
+    printf("%p free type %s\n", (void *) object, translateType(object->type));
 #endif
-
     switch (object->type) {
         case OBJ_BOUND_METHOD: {
             FREE(ObjBoundMethod, object);
@@ -196,6 +224,7 @@ static void freeObject(Obj *object) {
             const ObjClass *class = (ObjClass *) object;
             freeTable(&class->methods);
             FREE(ObjClass, object);
+            break;
         }
         case OBJ_CLOSURE: {
             const ObjClosure *closure = (ObjClosure *) object;

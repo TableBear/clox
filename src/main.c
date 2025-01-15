@@ -50,7 +50,7 @@ static char *readFile(const char *path) {
 
 static void runFile(const char *path) {
     char *source = readFile(path);
-    InterpretResult result = interpret(source);
+    const InterpretResult result = interpret(source);
     free(source);
 
     if (result == INTERPRET_COMPILE_ERROR) {
@@ -63,6 +63,7 @@ static void runFile(const char *path) {
 
 int main(const int argc, const char *args[]) {
     setbuf(stdout,NULL);
+    setbuf(stderr,NULL);
     // initial virtual machine
     initVM();
     if (argc == 1) {
