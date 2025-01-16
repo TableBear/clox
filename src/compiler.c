@@ -991,7 +991,7 @@ ObjFunction *compile(const char *source) {
 
 
 void markCompilerRoots() {
-    Compiler *compiler = current;
+    const Compiler *compiler = current;
     while (compiler != NULL) {
         markObject((Obj *) compiler->function);
         compiler = compiler->enclosing;

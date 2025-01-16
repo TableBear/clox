@@ -28,7 +28,7 @@ static char *readFile(const char *path) {
     }
 
     fseek(file, 0L, SEEK_END);
-    size_t fileSize = ftell(file);
+    const size_t fileSize = ftell(file);
     rewind(file);
 
     char *buffer = (char *) malloc(fileSize + 1);
@@ -37,7 +37,7 @@ static char *readFile(const char *path) {
         exit(74);
     }
 
-    size_t bytesRead = fread(buffer, sizeof(char), fileSize, file);
+    const size_t bytesRead = fread(buffer, sizeof(char), fileSize, file);
     if (bytesRead < fileSize) {
         fprintf(stderr, "Could not read file \"%s\".\n", path);
         exit(74);
@@ -63,7 +63,6 @@ static void runFile(const char *path) {
 
 int main(const int argc, const char *args[]) {
     setbuf(stdout,NULL);
-    setbuf(stderr,NULL);
     // initial virtual machine
     initVM();
     if (argc == 1) {

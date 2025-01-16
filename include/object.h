@@ -65,7 +65,7 @@ typedef struct {
     NativeFn function;
 } ObjNative;
 
-typedef struct {
+typedef struct ObjUpvalue {
     Obj obj;
     Value *location;
     Value closed;
@@ -104,12 +104,12 @@ typedef struct ObjString {
 typedef struct {
     Obj obj;
     Value receiver;
-    ObjClosure* method;
+    ObjClosure *method;
 } ObjBoundMethod;
 
 ObjBoundMethod *newBoundMethod(Value receiver, ObjClosure *method);
 
-ObjClass* newClass(ObjString* name);
+ObjClass *newClass(ObjString *name);
 
 ObjClosure *newClosure(ObjFunction *function);
 
@@ -129,6 +129,29 @@ void printObject(Value value);
 
 static inline bool isObjType(const Value value, const ObjType type) {
     return IS_OBJ(value) && AS_OBJ(value)->type == type;
+}
+
+static inline const char *translateType(const ObjType type) {
+    switch (type) {
+        case OBJ_BOUND_METHOD:
+            return "bound method";
+        case OBJ_CLASS:
+            return "class";
+        case OBJ_CLOSURE:
+            return "closure";
+        case OBJ_FUNCTION:
+            return "function";
+        case OBJ_INSTANCE:
+            return "instance";
+        case OBJ_NATIVE:
+            return "native function";
+        case OBJ_STRING:
+            return "string";
+        case OBJ_UPVALUE:
+            return "upvalue";
+        default:
+            return "unknown type";
+    }
 }
 
 #endif //clox_object_h

@@ -113,18 +113,19 @@ void markObject(Obj *object) {
 
     object->isMarked = true;
 
-    if (vm.grayCapacity < vm.grayCapacity + 1) {
+    if (vm.grayCapacity < (vm.grayCount + 1)* sizeof(Obj *)) {
         vm.grayCapacity = GROW_CAPACITY(vm.grayCapacity);
         vm.grayStack = (Obj **) realloc(vm.grayStack, vm.grayCapacity * sizeof(Obj *));
         if (vm.grayStack == NULL) {
             exit(1);
         }
     }
+    vm.grayStack[vm.grayCount++] = object;
 }
 
 static void markRoots() {
     // mark the stack
-    for (Value *slot = vm.stack; slot < vm.stackTop; slot++) {
+    for (const Value *slot = vm.stack; slot < vm.stackTop; slot++) {
         markValue(*slot);
     }
     // mark the call frames
@@ -186,29 +187,6 @@ void collectGarbage() {
     printf("   collected %zu bytes (from %zu to %zu) next at %zu\n",
            before - vm.bytesAllocated, before, vm.bytesAllocated, vm.nextGC);
 #endif
-}
-
-static const char *translateType(const ObjType type) {
-    switch (type) {
-        case OBJ_BOUND_METHOD:
-            return "bound method";
-        case OBJ_CLASS:
-            return "class";
-        case OBJ_CLOSURE:
-            return "closure";
-        case OBJ_FUNCTION:
-            return "function";
-        case OBJ_INSTANCE:
-            return "instance";
-        case OBJ_NATIVE:
-            return "native function";
-        case OBJ_STRING:
-            return "string";
-        case OBJ_UPVALUE:
-            return "upvalue";
-        default:
-            return "unknown type";
-    }
 }
 
 static void freeObject(Obj *object) {

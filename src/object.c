@@ -14,18 +14,22 @@
         (type*) allocateObject(sizeof(type), objectType)
 
 
-static Obj *allocateObject(size_t size, ObjType type) {
+static Obj *allocateObject(const size_t size, const ObjType type) {
     Obj *object = (Obj *) reallocate(NULL, 0, size);
     object->type = type;
+    object->isMarked = false;
     object->next = vm.objects;
     vm.objects = object;
+#ifdef DEBUG_LOG_GC
+    printf("%p allocate %zu for %s\n", (void *) object, size, translateType(type));
+#endif
     return object;
 }
 
 ObjBoundMethod *newBoundMethod(const Value receiver, ObjClosure *method) {
     ObjBoundMethod *bound = ALLOCATE_OBJ(ObjBoundMethod, OBJ_BOUND_METHOD);
-    bound->method = method;
     bound->receiver = receiver;
+    bound->method = method;
     return bound;
 }
 
@@ -64,7 +68,7 @@ ObjInstance *newInstance(ObjClass *klass) {
     return instance;
 }
 
-ObjNative *newNative(NativeFn function) {
+ObjNative *newNative(const NativeFn function) {
     ObjNative *native = ALLOCATE_OBJ(ObjNative, OBJ_NATIVE);
     native->function = function;
     return native;
@@ -91,7 +95,7 @@ uint32_t hashString(const char *key, int length) {
 }
 
 ObjString *takeString(char *chars, int length) {
-    uint32_t hash = hashString(chars, length);
+    const uint32_t hash = hashString(chars, length);
     ObjString *interned = tableFindString(&vm.strings, chars, length, hash);
     if (interned != NULL) {
         FREE_ARRAY(char, chars, length);
@@ -100,8 +104,8 @@ ObjString *takeString(char *chars, int length) {
     return allocateString(chars, length, hash);
 }
 
-ObjString *copyString(const char *chars, int length) {
-    uint32_t hash = hashString(chars, length);
+ObjString *copyString(const char *chars, const int length) {
+    const uint32_t hash = hashString(chars, length);
     ObjString *interned = tableFindString(&vm.strings, chars, length, hash);
     if (interned != NULL) {
         return interned;
