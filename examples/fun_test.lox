@@ -1,0 +1,19 @@
+class A {
+
+    init() {
+        print "Construct A.";
+    }
+
+    a() {
+        print "a";
+    }
+}
+
+class B {
+    b() {
+        print "b";
+    }
+}
+
+var a = A();
+var b = B();

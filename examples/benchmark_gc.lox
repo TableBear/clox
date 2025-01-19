@@ -1,0 +1,14 @@
+class Foo {
+  init() {
+    this.bar = 42;
+  }
+}
+
+for (var i = 0; i < 10000000; i=i+1) {
+    //print i;
+    var b = Foo();
+    var c = Foo();
+    var d = Foo();
+    var e = Foo();
+}
+print "done";
